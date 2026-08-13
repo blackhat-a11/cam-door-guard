@@ -172,8 +172,8 @@ export function useSmartHome() {
         const mqtt = (await import("mqtt")).default;
         const client = mqtt.connect(cfg.url, {
           clientId: `smarthome-app-${Math.random().toString(16).slice(2, 10)}`,
-          username: cfg.username || undefined,
-          password: cfg.password || undefined,
+          ...(cfg.username ? { username: cfg.username } : {}),
+          ...(cfg.password ? { password: cfg.password } : {}),
           reconnectPeriod: 3000,
           connectTimeout: 8000,
           clean: true,
@@ -266,7 +266,11 @@ export function useSmartHome() {
     [publish, pushLog],
   );
 
-  useEffect(() => () => clientRef.current?.end(true), []);
+  useEffect(() => {
+    return () => {
+      clientRef.current?.end(true);
+    };
+  }, []);
 
   return {
     settings,
