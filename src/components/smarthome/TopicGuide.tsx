@@ -6,6 +6,12 @@ const PUBLISH_TOPICS: [string, string, string][] = [
   ["buzzer/set", "1 / 0", "App -> ESP32: buzzer on / off"],
   ["buzzer/beep", "1", "App -> ESP32: bunyi singkat"],
   ["door/set", "open / close", "App -> ESP32-CAM: buka / kunci pintu"],
+  ["security/set", "armed / disarmed", "App -> ESP32: mode keamanan"],
+  ["security/panic", "1 / 0", "App -> ESP32: tombol darurat, alarm penuh"],
+  ["face/enroll", '{"slot":1,"name":"Rizky"}', "App -> ESP32-CAM: daftarkan wajah baru"],
+  ["face/delete", '{"slot":1}', "App -> ESP32-CAM: hapus wajah"],
+  ["face/active", '{"slot":1,"active":false}', "App -> ESP32-CAM: aktif / nonaktifkan wajah"],
+  ["cam/snapshot", "1", "App -> ESP32-CAM: minta foto snapshot"],
 ];
 
 const SUBSCRIBE_TOPICS: [string, string, string][] = [
@@ -20,6 +26,9 @@ const SUBSCRIBE_TOPICS: [string, string, string][] = [
     '{"name":"Rizky","status":"granted","confidence":0.92,"time":"2026-08-13T12:00:00Z"}',
     "ESP32-CAM -> App: hasil pengenalan wajah (masuk ke riwayat)",
   ],
+  ["security/state", "armed / disarmed", "ESP32 -> App: konfirmasi mode keamanan"],
+  ["esp32/heartbeat", '{"rssi":-58,"uptime":1200,"ip":"192.168.1.10"}', "ESP32 -> App: status perangkat tiap 10 detik"],
+  ["cam/heartbeat", '{"rssi":-61,"uptime":900,"ip":"192.168.1.20"}', "ESP32-CAM -> App: status perangkat tiap 10 detik"],
 ];
 
 function Table({ rows, title }: { rows: [string, string, string][]; title: string }) {

@@ -3,6 +3,7 @@ export type MqttSettings = {
   base: string;
   username: string;
   password: string;
+  cameraUrl: string;
 };
 
 export const DEFAULT_SETTINGS: MqttSettings = {
@@ -10,10 +11,12 @@ export const DEFAULT_SETTINGS: MqttSettings = {
   base: "smarthome",
   username: "",
   password: "",
+  cameraUrl: "",
 };
 
 const SETTINGS_KEY = "sh.mqtt.settings";
 const LOG_KEY = "sh.access.logs";
+const FACE_KEY = "sh.faces";
 
 export type AccessLog = {
   id: string;
@@ -27,14 +30,28 @@ export type AccessLog = {
   raw?: string;
 };
 
-export function loadSettings(): MqttSettings {
-  if (typeof window === "undefined") return DEFAULT_SETTINGS;
+export type FaceProfile = {
+  id: string;
+  name: string;
+  role: string;
+  slot: number;
+  note?: string;
+  createdAt: string;
+  active: boolean;
+};
+
+function read<T>(key: string, fallback: T): T {
+  if (typeof window === "undefined") return fallback;
   try {
-    const v = window.localStorage.getItem(SETTINGS_KEY);
-    return v ? { ...DEFAULT_SETTINGS, ...JSON.parse(v) } : DEFAULT_SETTINGS;
+    const v = window.localStorage.getItem(key);
+    return v ? (JSON.parse(v) as T) : fallback;
   } catch {
-    return DEFAULT_SETTINGS;
+    return fallback;
   }
+}
+
+export function loadSettings(): MqttSettings {
+  return { ...DEFAULT_SETTINGS, ...read<Partial<MqttSettings>>(SETTINGS_KEY, {}) };
 }
 
 export function saveSettings(s: MqttSettings) {
@@ -42,15 +59,33 @@ export function saveSettings(s: MqttSettings) {
 }
 
 export function loadLogs(): AccessLog[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const v = window.localStorage.getItem(LOG_KEY);
-    return v ? (JSON.parse(v) as AccessLog[]) : [];
-  } catch {
-    return [];
-  }
+  return read<AccessLog[]>(LOG_KEY, []);
 }
 
 export function saveLogs(logs: AccessLog[]) {
   window.localStorage.setItem(LOG_KEY, JSON.stringify(logs.slice(0, 300)));
+}
+
+export function loadFaces(): FaceProfile[] {
+  return read<FaceProfile[]>(FACE_KEY, []);
+}
+
+export function saveFaces(faces: FaceProfile[]) {
+  window.localStorage.setItem(FACE_KEY, JSON.stringify(faces));
+}
+
+export function logsToCsv(logs: AccessLog[]) {
+  const head = ["no", "nama", "status", "waktu", "akurasi", "metode", "perangkat"];
+  const rows = logs.map((l, i) => [
+    String(logs.length - i),
+    l.name,
+    l.status === "granted" ? "DIBUKA" : "DITOLAK",
+    l.time,
+    l.confidence != null ? String(l.confidence) : "",
+    l.method ?? "",
+    l.device ?? "",
+  ]);
+  return [head, ...rows]
+    .map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(","))
+    .join("\n");
 }

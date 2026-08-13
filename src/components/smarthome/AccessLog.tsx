@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import type { AccessLog } from "@/lib/mqtt-config";
+import { logsToCsv, type AccessLog } from "@/lib/mqtt-config";
 
 function fmt(iso: string) {
   const d = new Date(iso);
@@ -28,6 +28,15 @@ export function AccessLogTable({
       ),
     [logs, q, filter],
   );
+
+  const exportCsv = () => {
+    const blob = new Blob([logsToCsv(filtered)], { type: "text/csv;charset=utf-8;" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `riwayat-akses-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
 
   const granted = logs.filter((l) => l.status === "granted").length;
   const denied = logs.length - granted;
@@ -60,6 +69,9 @@ export function AccessLogTable({
               {f === "all" ? "Semua" : f === "granted" ? "Dikenal" : "Ditolak"}
             </Button>
           ))}
+          <Button size="sm" variant="outline" onClick={exportCsv}>
+            Ekspor CSV
+          </Button>
           <Button size="sm" variant="outline" onClick={onClear}>
             Hapus
           </Button>
