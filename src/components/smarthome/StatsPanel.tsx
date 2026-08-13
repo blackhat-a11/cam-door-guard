@@ -8,7 +8,7 @@ type Stats = {
   topVisitors: [string, number][];
 };
 
-function Card({ label, value, hint, tone }: { label: string; value: string; hint?: string; tone?: string }) {
+function Card({ label, value, hint, tone }: { label: string; value: string; hint?: string | undefined; tone?: string | undefined }) {
   return (
     <div className="panel p-4">
       <p className="label-mono">{label}</p>
