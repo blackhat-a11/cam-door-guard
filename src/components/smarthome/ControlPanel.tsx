@@ -3,7 +3,7 @@ import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import type { DeviceState } from "@/lib/use-smart-home";
 
-const SERVO_LABELS = ["Servo 1 · Pintu Garasi", "Servo 2 · Pintu Daun Kiri", "Servo 3 · Pintu Daun Kanan"];
+const SERVO_LABELS = ["Servo 1 · Pintu", "Servo 2 · Jendela", "Servo 3 · Garasi"];
 
 export function ServoPanel({
   state,
@@ -15,37 +15,24 @@ export function ServoPanel({
   onServo: (i: 0 | 1 | 2, v: number) => void;
 }) {
   return (
-    <div className="panel animate-fade-up p-5">
+    <div className="panel p-5">
       <p className="label-mono">Kontrol Servo · ESP32</p>
       <div className="mt-4 space-y-6">
         {state.servo.map((val, i) => (
-          <div key={i} className="animate-fade-up" style={{ animationDelay: `${i * 90}ms` }}>
+          <div key={i}>
             <div className="flex items-baseline justify-between">
               <span className="text-sm font-medium">{SERVO_LABELS[i]}</span>
-              <span key={val} className="animate-value-pop font-mono text-sm text-primary">
-                {val}°
-              </span>
+              <span className="font-mono text-sm text-primary">{val}°</span>
             </div>
-
-            <div className="mt-3 flex items-center gap-4">
-              <div className="relative grid size-14 shrink-0 place-items-center rounded-full border border-border bg-secondary/50">
-                <span
-                  className="absolute h-1 w-6 origin-left rounded-full bg-primary transition-transform duration-500 ease-out"
-                  style={{ left: "50%", transform: `rotate(${val - 90}deg)` }}
-                />
-                <span className="size-2 rounded-full bg-primary" />
-              </div>
-              <Slider
-                className="flex-1"
-                value={[val]}
-                min={0}
-                max={180}
-                step={1}
-                disabled={!online}
-                onValueChange={(v) => onServo(i as 0 | 1 | 2, v[0] ?? 0)}
-              />
-            </div>
-
+            <Slider
+              className="mt-3"
+              value={[val]}
+              min={0}
+              max={180}
+              step={1}
+              disabled={!online}
+              onValueChange={(v) => onServo(i as 0 | 1 | 2, v[0] ?? 0)}
+            />
             <div className="mt-2 flex gap-2">
               {[0, 90, 180].map((preset) => (
                 <Button
@@ -53,7 +40,6 @@ export function ServoPanel({
                   size="sm"
                   variant="secondary"
                   disabled={!online}
-                  className="transition-transform hover:scale-105 active:scale-95"
                   onClick={() => onServo(i as 0 | 1 | 2, preset)}
                 >
                   {preset}°
@@ -71,21 +57,23 @@ export function DevicePanel({
   state,
   online,
   onLed,
+  onBuzzer,
+  onPublish,
 }: {
   state: DeviceState;
   online: boolean;
   onLed: (on: boolean) => void;
+  onBuzzer: (on: boolean) => void;
+  onPublish: (topic: string, payload: string) => void;
 }) {
   return (
-    <div className="panel animate-fade-up space-y-4 p-5">
+    <div className="panel space-y-4 p-5">
       <p className="label-mono">Perangkat · ESP32</p>
 
-      <div className="flex items-center justify-between rounded-xl border border-border bg-secondary/50 p-4 transition-transform duration-300 hover:-translate-y-0.5">
+      <div className="flex items-center justify-between rounded-xl border border-border bg-secondary/50 p-4">
         <div className="flex items-center gap-3">
           <span
-            className={`size-3 rounded-full transition-all duration-500 ${
-              state.led ? "bg-warning glow-primary animate-glow-pulse" : "bg-muted-foreground"
-            }`}
+            className={`size-3 rounded-full ${state.led ? "bg-warning glow-primary" : "bg-muted-foreground"}`}
           />
           <div>
             <p className="text-sm font-medium">LED</p>
@@ -95,9 +83,41 @@ export function DevicePanel({
         <Switch checked={state.led} disabled={!online} onCheckedChange={onLed} />
       </div>
 
-      <p className="font-mono text-[11px] text-muted-foreground">
-        Sensor ultrasonic dan LDR tampil di tab <span className="text-primary">Sensor</span>.
-      </p>
+      <div className="flex items-center justify-between rounded-xl border border-border bg-secondary/50 p-4">
+        <div className="flex items-center gap-3">
+          <span
+            className={`size-3 rounded-full ${state.buzzer ? "bg-destructive pulse-ring" : "bg-muted-foreground"}`}
+          />
+          <div>
+            <p className="text-sm font-medium">Buzzer / Alarm</p>
+            <p className="label-mono">{state.buzzer ? "Bunyi" : "Senyap"}</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled={!online}
+            onClick={() => onPublish("buzzer/beep", "1")}
+          >
+            Beep
+          </Button>
+          <Switch checked={state.buzzer} disabled={!online} onCheckedChange={onBuzzer} />
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between rounded-xl border border-border bg-secondary/50 p-4">
+        <div className="flex items-center gap-3">
+          <span
+            className={`size-3 rounded-full ${state.ir ? "bg-success pulse-ring" : "bg-muted-foreground"}`}
+          />
+          <div>
+            <p className="text-sm font-medium">Sensor Infrared</p>
+            <p className="label-mono">{state.ir ? "Objek terdeteksi" : "Tidak ada objek"}</p>
+          </div>
+        </div>
+        <span className="font-mono text-xs text-muted-foreground">read-only</span>
+      </div>
     </div>
   );
 }

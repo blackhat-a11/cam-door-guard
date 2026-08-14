@@ -3,6 +3,7 @@ export type MqttSettings = {
   base: string;
   username: string;
   password: string;
+  cameraUrl: string;
 };
 
 export const DEFAULT_SETTINGS: MqttSettings = {
@@ -10,20 +11,33 @@ export const DEFAULT_SETTINGS: MqttSettings = {
   base: "smarthome",
   username: "",
   password: "",
+  cameraUrl: "",
 };
 
 const SETTINGS_KEY = "sh.mqtt.settings";
 const LOG_KEY = "sh.access.logs";
+const FACE_KEY = "sh.faces";
 
 export type AccessLog = {
   id: string;
   name: string;
   status: "granted" | "denied";
   time: string;
-  distance?: number | null;
+  confidence?: number | null;
   device?: string | null;
   method?: string | null;
+  image?: string | null;
   raw?: string;
+};
+
+export type FaceProfile = {
+  id: string;
+  name: string;
+  role: string;
+  slot: number;
+  note?: string;
+  createdAt: string;
+  active: boolean;
 };
 
 function read<T>(key: string, fallback: T): T {
@@ -52,38 +66,26 @@ export function saveLogs(logs: AccessLog[]) {
   window.localStorage.setItem(LOG_KEY, JSON.stringify(logs.slice(0, 300)));
 }
 
+export function loadFaces(): FaceProfile[] {
+  return read<FaceProfile[]>(FACE_KEY, []);
+}
+
+export function saveFaces(faces: FaceProfile[]) {
+  window.localStorage.setItem(FACE_KEY, JSON.stringify(faces));
+}
+
 export function logsToCsv(logs: AccessLog[]) {
-  const head = ["no", "kejadian", "status", "waktu", "jarak_cm", "metode", "perangkat"];
+  const head = ["no", "nama", "status", "waktu", "akurasi", "metode", "perangkat"];
   const rows = logs.map((l, i) => [
     String(logs.length - i),
     l.name,
-    l.status === "granted" ? "TERBUKA" : "TERTUTUP",
+    l.status === "granted" ? "DIBUKA" : "DITOLAK",
     l.time,
-    l.distance != null ? String(l.distance) : "",
+    l.confidence != null ? String(l.confidence) : "",
     l.method ?? "",
     l.device ?? "",
   ]);
   return [head, ...rows]
     .map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(","))
     .join("\n");
-}
-
-/* ---------------- Auth (login lokal panel) ---------------- */
-
-const AUTH_KEY = "sh.auth.session";
-const AUTH_USER = "smarthome";
-const AUTH_PASS = "smkn56jakarta";
-
-export function checkCredentials(username: string, password: string) {
-  return username.trim() === AUTH_USER && password === AUTH_PASS;
-}
-
-export function isLoggedIn() {
-  if (typeof window === "undefined") return false;
-  return window.localStorage.getItem(AUTH_KEY) === "1";
-}
-
-export function setLoggedIn(v: boolean) {
-  if (v) window.localStorage.setItem(AUTH_KEY, "1");
-  else window.localStorage.removeItem(AUTH_KEY);
 }
