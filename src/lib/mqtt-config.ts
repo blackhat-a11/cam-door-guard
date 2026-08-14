@@ -7,7 +7,7 @@ export type MqttSettings = {
 };
 
 export const DEFAULT_SETTINGS: MqttSettings = {
-  url: "wss://broker.emqx.io:8084/mqtt",
+  url: "wss://6f934067d9f749aea7b60ba9783820ec.s1.eu.hivemq.cloud:8884/mqtt",
   base: "smarthome",
   username: "",
   password: "",
