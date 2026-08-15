@@ -3,7 +3,6 @@ export type MqttSettings = {
   base: string;
   username: string;
   password: string;
-  cameraUrl: string;
 };
 
 export const DEFAULT_SETTINGS: MqttSettings = {
@@ -11,33 +10,21 @@ export const DEFAULT_SETTINGS: MqttSettings = {
   base: "smarthome",
   username: "",
   password: "",
-  cameraUrl: "",
 };
 
 const SETTINGS_KEY = "sh.mqtt.settings";
 const LOG_KEY = "sh.access.logs";
-const FACE_KEY = "sh.faces";
 
-export type AccessLog = {
+export type DoorLog = {
   id: string;
   name: string;
-  status: "granted" | "denied";
+  status: "open" | "close";
   time: string;
-  confidence?: number | null;
+  distance?: number | null;
+  ldr?: number | null;
   device?: string | null;
   method?: string | null;
-  image?: string | null;
   raw?: string;
-};
-
-export type FaceProfile = {
-  id: string;
-  name: string;
-  role: string;
-  slot: number;
-  note?: string;
-  createdAt: string;
-  active: boolean;
 };
 
 function read<T>(key: string, fallback: T): T {
@@ -63,30 +50,23 @@ export function saveSettings(s: MqttSettings) {
   window.localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
 }
 
-export function loadLogs(): AccessLog[] {
-  return read<AccessLog[]>(LOG_KEY, []);
+export function loadLogs(): DoorLog[] {
+  return read<DoorLog[]>(LOG_KEY, []);
 }
 
-export function saveLogs(logs: AccessLog[]) {
+export function saveLogs(logs: DoorLog[]) {
   window.localStorage.setItem(LOG_KEY, JSON.stringify(logs.slice(0, 300)));
 }
 
-export function loadFaces(): FaceProfile[] {
-  return read<FaceProfile[]>(FACE_KEY, []);
-}
-
-export function saveFaces(faces: FaceProfile[]) {
-  window.localStorage.setItem(FACE_KEY, JSON.stringify(faces));
-}
-
-export function logsToCsv(logs: AccessLog[]) {
-  const head = ["no", "nama", "status", "waktu", "akurasi", "metode", "perangkat"];
+export function logsToCsv(logs: DoorLog[]) {
+  const head = ["no", "keterangan", "status", "waktu", "jarak_cm", "ldr", "metode", "perangkat"];
   const rows = logs.map((l, i) => [
     String(logs.length - i),
     l.name,
-    l.status === "granted" ? "DIBUKA" : "DITOLAK",
+    l.status === "open" ? "TERBUKA" : "TERTUTUP",
     l.time,
-    l.confidence != null ? String(l.confidence) : "",
+    l.distance != null ? String(l.distance) : "",
+    l.ldr != null ? String(l.ldr) : "",
     l.method ?? "",
     l.device ?? "",
   ]);
