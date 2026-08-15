@@ -50,8 +50,13 @@ function read<T>(key: string, fallback: T): T {
   }
 }
 
+// URL broker lama yang otomatis diganti ke default baru (HiveMQ Cloud)
+const LEGACY_URLS = ["wss://broker.emqx.io:8084/mqtt", "ws://broker.emqx.io:8083/mqtt"];
+
 export function loadSettings(): MqttSettings {
-  return { ...DEFAULT_SETTINGS, ...read<Partial<MqttSettings>>(SETTINGS_KEY, {}) };
+  const saved = read<Partial<MqttSettings>>(SETTINGS_KEY, {});
+  if (saved.url && LEGACY_URLS.includes(saved.url)) delete saved.url;
+  return { ...DEFAULT_SETTINGS, ...saved };
 }
 
 export function saveSettings(s: MqttSettings) {
