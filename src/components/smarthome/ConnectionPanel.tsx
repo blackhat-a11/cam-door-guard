@@ -102,6 +102,15 @@ export function ConnectionPanel({
               className="font-mono text-sm"
             />
           </div>
+          <div className="space-y-1.5 sm:col-span-2">
+            <Label className="label-mono">URL Kamera / MJPEG (opsional)</Label>
+            <Input
+              value={form.cameraUrl}
+              onChange={(e) => setForm({ ...form, cameraUrl: e.target.value })}
+              placeholder="http://192.168.1.50:81/stream"
+              className="font-mono text-sm"
+            />
+          </div>
           <div className="sm:col-span-2">
             <Button size="sm" onClick={() => onConnect(form)}>
               Simpan & Hubungkan Ulang
