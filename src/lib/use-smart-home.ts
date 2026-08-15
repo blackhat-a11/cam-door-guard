@@ -2,14 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { MqttClient } from "mqtt";
 import { toast } from "sonner";
 import {
-  loadFaces,
   loadLogs,
   loadSettings,
-  saveFaces,
   saveLogs,
   saveSettings,
-  type AccessLog,
-  type FaceProfile,
+  type DoorLog,
   type MqttSettings,
 } from "./mqtt-config";
 
@@ -26,14 +23,12 @@ export type DeviceState = {
   door: "open" | "closed" | "unknown";
   doorCount: number;
   led: boolean;
-  buzzer: boolean;
-  ir: boolean;
   servo: [number, number, number];
-  lastFace: string | null;
+  distance: number | null;
+  ldr: number | null;
+  lastTrigger: string | null;
   lastSeen: string | null;
-  armed: boolean;
-  panic: boolean;
-  health: { esp32: DeviceHealth; cam: DeviceHealth };
+  health: { esp32: DeviceHealth };
 };
 
 const emptyHealth: DeviceHealth = { lastSeen: null, rssi: null, uptime: null, ip: null };
@@ -42,18 +37,16 @@ const initialState: DeviceState = {
   door: "unknown",
   doorCount: 0,
   led: false,
-  buzzer: false,
-  ir: false,
-  servo: [90, 90, 90],
-  lastFace: null,
+  servo: [0, 0, 0],
+  distance: null,
+  ldr: null,
+  lastTrigger: null,
   lastSeen: null,
-  armed: false,
-  panic: false,
-  health: { esp32: { ...emptyHealth }, cam: { ...emptyHealth } },
+  health: { esp32: { ...emptyHealth } },
 };
 
 const truthy = (v: string) =>
-  ["1", "on", "true", "open", "armed", "high"].includes(v.trim().toLowerCase());
+  ["1", "on", "true", "open", "terang", "high"].includes(v.trim().toLowerCase());
 
 function beep(pattern: "alert" | "ok" = "alert") {
   try {
@@ -82,16 +75,15 @@ export function useSmartHome() {
   const [conn, setConn] = useState<ConnState>("idle");
   const [error, setError] = useState<string | null>(null);
   const [state, setState] = useState<DeviceState>(initialState);
-  const [logs, setLogs] = useState<AccessLog[]>([]);
-  const [faces, setFaces] = useState<FaceProfile[]>([]);
+  const [logs, setLogs] = useState<DoorLog[]>([]);
   const [traffic, setTraffic] = useState<{ topic: string; payload: string; at: string }[]>([]);
   const [, setTick] = useState(0);
   const clientRef = useRef<MqttClient | null>(null);
-  const armedRef = useRef(false);
+  const stateRef = useRef<DeviceState>(initialState);
+  stateRef.current = state;
 
   useEffect(() => {
     setLogs(loadLogs());
-    setFaces(loadFaces());
   }, []);
 
   useEffect(() => {
@@ -99,7 +91,7 @@ export function useSmartHome() {
     return () => clearInterval(t);
   }, []);
 
-  const pushLog = useCallback((log: AccessLog) => {
+  const pushLog = useCallback((log: DoorLog) => {
     setLogs((prev) => {
       const next = [log, ...prev].slice(0, 300);
       saveLogs(next);
@@ -111,6 +103,22 @@ export function useSmartHome() {
     setLogs([]);
     saveLogs([]);
   }, []);
+
+  const logDoor = useCallback(
+    (status: "open" | "close", name: string, method: string, device = "ESP32") => {
+      pushLog({
+        id: `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+        name,
+        status,
+        time: new Date().toISOString(),
+        distance: stateRef.current.distance,
+        ldr: stateRef.current.ldr,
+        device,
+        method,
+      });
+    },
+    [pushLog],
+  );
 
   const handleMessage = useCallback(
     (topic: string, payloadBuf: Uint8Array) => {
@@ -135,9 +143,7 @@ export function useSmartHome() {
         return;
       }
 
-      const hbMatch = key.match(/^(esp32|cam)\/(heartbeat|status)$/);
-      if (hbMatch) {
-        const dev = hbMatch[1] as "esp32" | "cam";
+      if (/^esp32\/(heartbeat|status)$/.test(key)) {
         let info: Record<string, unknown> = {};
         try {
           info = JSON.parse(payload) as Record<string, unknown>;
@@ -147,12 +153,11 @@ export function useSmartHome() {
         setState((s) => ({
           ...s,
           health: {
-            ...s.health,
-            [dev]: {
+            esp32: {
               lastSeen: Date.now(),
-              rssi: typeof info["rssi"] === "number" ? info["rssi"] : s.health[dev].rssi,
-              uptime: typeof info["uptime"] === "number" ? info["uptime"] : s.health[dev].uptime,
-              ip: info["ip"] ? String(info["ip"]) : s.health[dev].ip,
+              rssi: typeof info["rssi"] === "number" ? info["rssi"] : s.health.esp32.rssi,
+              uptime: typeof info["uptime"] === "number" ? info["uptime"] : s.health.esp32.uptime,
+              ip: info["ip"] ? String(info["ip"]) : s.health.esp32.ip,
             },
           },
         }));
@@ -163,83 +168,67 @@ export function useSmartHome() {
         case "led/state":
           setState((s) => ({ ...s, led: truthy(payload) }));
           return;
-        case "buzzer/state":
-          setState((s) => ({ ...s, buzzer: truthy(payload) }));
-          return;
-        case "sensor/ir":
-        case "ir/state": {
-          const on = truthy(payload);
-          setState((s) => ({ ...s, ir: on }));
-          if (on && armedRef.current) {
-            beep("alert");
-            toast.warning("Gerakan terdeteksi sensor infrared", {
-              description: "Mode keamanan aktif — periksa area pintu.",
-            });
-          }
+        case "sensor/ultrasonic":
+        case "ultrasonic/state": {
+          const cm = Number(payload.replace(/[^\d.-]/g, ""));
+          if (!Number.isNaN(cm)) setState((s) => ({ ...s, distance: cm, lastSeen: at }));
           return;
         }
-        case "door/state":
-          setState((s) => ({ ...s, door: truthy(payload) ? "open" : "closed" }));
+        case "sensor/ldr":
+        case "ldr/state": {
+          const v = Number(payload.replace(/[^\d.-]/g, ""));
+          if (!Number.isNaN(v)) setState((s) => ({ ...s, ldr: v, lastSeen: at }));
           return;
+        }
+        case "door/state": {
+          const open = truthy(payload);
+          setState((s) => {
+            if (s.door === (open ? "open" : "closed")) return s;
+            return { ...s, door: open ? "open" : "closed", lastSeen: at };
+          });
+          return;
+        }
         case "door/count":
           if (!Number.isNaN(Number(payload))) {
             setState((s) => ({ ...s, doorCount: Number(payload) }));
           }
           return;
-        case "security/state":
-          setState((s) => ({ ...s, armed: truthy(payload) }));
-          armedRef.current = truthy(payload);
-          return;
-        case "door/event":
-        case "face/event": {
+        case "door/event": {
           let parsed: Record<string, unknown> = {};
           try {
             parsed = JSON.parse(payload) as Record<string, unknown>;
           } catch {
-            parsed = { name: payload };
+            parsed = { status: payload };
           }
-          const name = String(parsed["name"] ?? parsed["user"] ?? "Tidak dikenal");
-          const statusRaw = String(parsed["status"] ?? parsed["access"] ?? "").toLowerCase();
-          const known = parsed["known"];
-          const status: AccessLog["status"] =
-            statusRaw.includes("grant") ||
-            statusRaw.includes("izin") ||
-            statusRaw === "ok" ||
-            known === true
-              ? "granted"
-              : statusRaw.includes("den") || statusRaw.includes("tolak") || known === false
-                ? "denied"
-                : name.toLowerCase().includes("unknown") ||
-                    name.toLowerCase().includes("tidak dikenal")
-                  ? "denied"
-                  : "granted";
-          const conf = parsed["confidence"];
+          const statusRaw = String(parsed["status"] ?? parsed["door"] ?? "").toLowerCase();
+          const status: DoorLog["status"] =
+            statusRaw.includes("open") || statusRaw.includes("buka") ? "open" : "close";
+          const trigger = String(parsed["trigger"] ?? parsed["source"] ?? "ultrasonic");
+          const dist = parsed["distance"];
+          const ldr = parsed["ldr"];
           pushLog({
             id: `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
-            name,
+            name: String(parsed["name"] ?? (status === "open" ? "Pintu terbuka" : "Pintu tertutup")),
             status,
             time: String(parsed["time"] ?? at),
-            confidence: typeof conf === "number" ? conf : null,
-            device: parsed["device"] ? String(parsed["device"]) : "ESP32-S3-CAM",
-            method: parsed["method"] ? String(parsed["method"]) : "face",
-            image: parsed["image"] ? String(parsed["image"]) : null,
+            distance: typeof dist === "number" ? dist : stateRef.current.distance,
+            ldr: typeof ldr === "number" ? ldr : stateRef.current.ldr,
+            device: parsed["device"] ? String(parsed["device"]) : "ESP32",
+            method: trigger,
             raw: payload.slice(0, 500),
           });
           setState((s) => ({
             ...s,
-            lastFace: name,
+            door: status === "open" ? "open" : "closed",
+            lastTrigger: trigger,
             lastSeen: at,
-            doorCount: status === "granted" ? s.doorCount + 1 : s.doorCount,
-            door: status === "granted" ? "open" : s.door,
+            doorCount: status === "open" ? s.doorCount + 1 : s.doorCount,
           }));
-          if (status === "granted") {
+          if (status === "open") {
             beep("ok");
-            toast.success(`Pintu dibuka untuk ${name}`);
+            toast.success("Pintu terbuka", { description: `Pemicu: ${trigger}` });
           } else {
-            beep("alert");
-            toast.error("Wajah tidak dikenal — akses ditolak", {
-              description: "Pintu tetap terkunci.",
-            });
+            toast("Pintu tertutup");
           }
           return;
         }
@@ -333,47 +322,12 @@ export function useSmartHome() {
     [publish],
   );
 
-  const toggleBuzzer = useCallback(
-    (on: boolean) => {
-      setState((s) => ({ ...s, buzzer: on }));
-      publish("buzzer/set", on ? "1" : "0");
+  const garageCommand = useCallback(
+    (cmd: "open" | "close") => {
+      publish("garage/set", cmd);
+      setServo(0, cmd === "open" ? 180 : 0);
     },
-    [publish],
-  );
-
-  const setArmed = useCallback(
-    (on: boolean) => {
-      setState((s) => ({ ...s, armed: on }));
-      armedRef.current = on;
-      publish("security/set", on ? "armed" : "disarmed");
-      toast[on ? "warning" : "success"](
-        on ? "Mode keamanan AKTIF" : "Mode keamanan dimatikan",
-      );
-    },
-    [publish],
-  );
-
-  const triggerPanic = useCallback(
-    (on: boolean) => {
-      setState((s) => ({ ...s, panic: on, buzzer: on ? true : s.buzzer }));
-      publish("security/panic", on ? "1" : "0");
-      if (on) {
-        beep("alert");
-        toast.error("PANIC MODE aktif — alarm dibunyikan!");
-        pushLog({
-          id: `${Date.now()}-panic`,
-          name: "Tombol darurat ditekan",
-          status: "denied",
-          time: new Date().toISOString(),
-          confidence: null,
-          device: "App",
-          method: "panic",
-        });
-      } else {
-        toast.success("Panic mode dimatikan");
-      }
-    },
-    [publish, pushLog],
+    [publish, setServo],
   );
 
   const doorCommand = useCallback(
@@ -382,106 +336,47 @@ export function useSmartHome() {
       setState((s) => ({
         ...s,
         door: cmd === "open" ? "open" : "closed",
+        lastTrigger: "manual",
+        lastSeen: new Date().toISOString(),
         doorCount: cmd === "open" ? s.doorCount + 1 : s.doorCount,
+        servo: [s.servo[0], cmd === "open" ? 90 : 0, cmd === "open" ? 90 : 0],
       }));
-      if (cmd === "open") {
-        pushLog({
-          id: `${Date.now()}-manual`,
-          name: "Buka manual (aplikasi)",
-          status: "granted",
-          time: new Date().toISOString(),
-          confidence: null,
-          device: "App",
-          method: "manual",
-        });
-      }
+      logDoor(cmd, cmd === "open" ? "Pintu dibuka (aplikasi)" : "Pintu ditutup (aplikasi)", "manual", "App");
     },
-    [publish, pushLog],
-  );
-
-  const addFace = useCallback(
-    (input: { name: string; role: string; note?: string }) => {
-      setFaces((prev) => {
-        const slot = prev.length ? Math.max(...prev.map((f) => f.slot)) + 1 : 1;
-        const face: FaceProfile = {
-          id: `${Date.now()}-${Math.random().toString(16).slice(2, 6)}`,
-          name: input.name,
-          role: input.role,
-          ...(input.note ? { note: input.note } : {}),
-          slot,
-          createdAt: new Date().toISOString(),
-          active: true,
-        };
-        const next = [...prev, face];
-        saveFaces(next);
-        publish("face/enroll", JSON.stringify({ slot, name: face.name }));
-        toast.success(`Perintah daftar wajah "${face.name}" dikirim (slot ${slot})`, {
-          description: "Arahkan wajah ke ESP32-S3-CAM sampai LED konfirmasi.",
-        });
-        return next;
-      });
-    },
-    [publish],
-  );
-
-  const toggleFace = useCallback(
-    (id: string) => {
-      setFaces((prev) => {
-        const next = prev.map((f) => (f.id === id ? { ...f, active: !f.active } : f));
-        saveFaces(next);
-        const f = next.find((x) => x.id === id);
-        if (f) publish("face/active", JSON.stringify({ slot: f.slot, active: f.active }));
-        return next;
-      });
-    },
-    [publish],
-  );
-
-  const deleteFace = useCallback(
-    (id: string) => {
-      setFaces((prev) => {
-        const f = prev.find((x) => x.id === id);
-        const next = prev.filter((x) => x.id !== id);
-        saveFaces(next);
-        if (f) {
-          publish("face/delete", JSON.stringify({ slot: f.slot, name: f.name }));
-          toast.success(`Wajah "${f.name}" dihapus`);
-        }
-        return next;
-      });
-    },
-    [publish],
+    [publish, logDoor],
   );
 
   const stats = useMemo(() => {
-    const granted = logs.filter((l) => l.status === "granted").length;
-    const denied = logs.length - granted;
+    const opened = logs.filter((l) => l.status === "open").length;
+    const closed = logs.length - opened;
     const hourly = Array.from({ length: 24 }, () => 0);
-    const byName = new Map<string, number>();
+    const byTrigger = new Map<string, number>();
     for (const l of logs) {
       const d = new Date(l.time);
       if (!Number.isNaN(d.getTime())) hourly[d.getHours()] = (hourly[d.getHours()] ?? 0) + 1;
-      if (l.status === "granted") byName.set(l.name, (byName.get(l.name) ?? 0) + 1);
+      if (l.status === "open") {
+        const k = l.method ?? "lainnya";
+        byTrigger.set(k, (byTrigger.get(k) ?? 0) + 1);
+      }
     }
     const peak = hourly.indexOf(Math.max(...hourly));
     const today = logs.filter(
       (l) => new Date(l.time).toDateString() === new Date().toDateString(),
     ).length;
     return {
-      granted,
-      denied,
+      opened,
+      closed,
       total: logs.length,
       hourly,
       today,
       peakHour: logs.length ? peak : null,
-      topVisitors: [...byName.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5),
+      topTriggers: [...byTrigger.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5),
     };
   }, [logs]);
 
   const now = Date.now();
   const deviceOnline = {
     esp32: state.health.esp32.lastSeen != null && now - state.health.esp32.lastSeen < 30000,
-    cam: state.health.cam.lastSeen != null && now - state.health.cam.lastSeen < 30000,
   };
 
   useEffect(() => {
@@ -497,7 +392,6 @@ export function useSmartHome() {
     error,
     state,
     logs,
-    faces,
     stats,
     traffic,
     deviceOnline,
@@ -506,13 +400,8 @@ export function useSmartHome() {
     publish,
     setServo,
     toggleLed,
-    toggleBuzzer,
-    setArmed,
-    triggerPanic,
     doorCommand,
-    addFace,
-    toggleFace,
-    deleteFace,
+    garageCommand,
     clearLogs,
   };
 }
