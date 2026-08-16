@@ -3,7 +3,7 @@ import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import type { DeviceState } from "@/lib/use-smart-home";
 
-const SERVO_LABELS = ["Servo 1 · Pintu", "Servo 2 · Jendela", "Servo 3 · Garasi"];
+const SERVO_LABELS = ["Servo 1 · Pintu Garasi", "Servo 2 · Pintu (Kiri)", "Servo 3 · Pintu (Kanan)"];
 
 export function ServoPanel({
   state,
@@ -57,14 +57,10 @@ export function DevicePanel({
   state,
   online,
   onLed,
-  onBuzzer,
-  onPublish,
 }: {
   state: DeviceState;
   online: boolean;
   onLed: (on: boolean) => void;
-  onBuzzer: (on: boolean) => void;
-  onPublish: (topic: string, payload: string) => void;
 }) {
   return (
     <div className="panel space-y-4 p-5">
@@ -73,7 +69,7 @@ export function DevicePanel({
       <div className="flex items-center justify-between rounded-xl border border-border bg-secondary/50 p-4">
         <div className="flex items-center gap-3">
           <span
-            className={`size-3 rounded-full ${state.led ? "bg-warning glow-primary" : "bg-muted-foreground"}`}
+            className={`size-3 rounded-full transition-colors ${state.led ? "bg-warning glow-primary" : "bg-muted-foreground"}`}
           />
           <div>
             <p className="text-sm font-medium">LED</p>
@@ -81,42 +77,6 @@ export function DevicePanel({
           </div>
         </div>
         <Switch checked={state.led} disabled={!online} onCheckedChange={onLed} />
-      </div>
-
-      <div className="flex items-center justify-between rounded-xl border border-border bg-secondary/50 p-4">
-        <div className="flex items-center gap-3">
-          <span
-            className={`size-3 rounded-full ${state.buzzer ? "bg-destructive pulse-ring" : "bg-muted-foreground"}`}
-          />
-          <div>
-            <p className="text-sm font-medium">Buzzer / Alarm</p>
-            <p className="label-mono">{state.buzzer ? "Bunyi" : "Senyap"}</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button
-            size="sm"
-            variant="secondary"
-            disabled={!online}
-            onClick={() => onPublish("buzzer/beep", "1")}
-          >
-            Beep
-          </Button>
-          <Switch checked={state.buzzer} disabled={!online} onCheckedChange={onBuzzer} />
-        </div>
-      </div>
-
-      <div className="flex items-center justify-between rounded-xl border border-border bg-secondary/50 p-4">
-        <div className="flex items-center gap-3">
-          <span
-            className={`size-3 rounded-full ${state.ir ? "bg-success pulse-ring" : "bg-muted-foreground"}`}
-          />
-          <div>
-            <p className="text-sm font-medium">Sensor Infrared</p>
-            <p className="label-mono">{state.ir ? "Objek terdeteksi" : "Tidak ada objek"}</p>
-          </div>
-        </div>
-        <span className="font-mono text-xs text-muted-foreground">read-only</span>
       </div>
     </div>
   );
