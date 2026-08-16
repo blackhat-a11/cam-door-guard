@@ -1,6 +1,5 @@
 # Smart Lock Guardian
 
-saya akan hari rabu mau lomba IoT, saya buat smarthome gitu, nah saya butuh apk buat control nya, saya kan pakai dua esp32, yg satu esp32 biasa , yg satu esp-s3-cam, nah untuk yg esp32 itu, niat saya dia untuk control 3 servo, 1 buzzer, 1 led, satu infrared, nah saya mau tuh untuk esp-s3-cam itu buat puka pintu dia pas ditek muka yg di daftarkan pintu itu akan ngenbuka tapi ketika wajah yg tidak di kenal pintu itu tidak akan terbuka, dan saya mau ketika ada yg masuk, atau nyoba masuk, ada data data nya gitu, kaya dari namanya terus ada waktu nya kapan dia masuk, dan kediteck juga si pintu ini berapa kali buka
 
 This project was built with [Lovable](https://lovable.dev).
 
